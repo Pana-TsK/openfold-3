@@ -739,4 +739,3 @@ def test_skip_random_init_context_manager():
 
     # function should be restored
     assert initialization.trunc_normal_init_ is original_func
-

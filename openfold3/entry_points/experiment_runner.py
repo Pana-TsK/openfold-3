@@ -539,6 +539,7 @@ class TrainingExperimentRunner(ExperimentRunner):
 @contextlib.contextmanager
 def skip_random_init():
     import openfold3.core.model.primitives.initialization as m
+
     def noop_init(*args, **kwargs):
         pass
 
@@ -548,7 +549,6 @@ def skip_random_init():
         yield
     finally:
         m.trunc_normal_init_ = original_trunc_normal_init
-
 
 
 class InferenceExperimentRunner(ExperimentRunner):
