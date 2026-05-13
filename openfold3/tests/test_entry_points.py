@@ -669,7 +669,8 @@ class TestRemoveQuerySetDuplicates:
 
 
 class TestSetupOpenFold:
-    def test_fresh_parameter_default_download(self, tmp_path):
+    def test_fresh_parameter_default_download(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("OPENFOLD_CACHE", raising=False)
         inputs = iter(
             [
                 str(tmp_path),  # Set cache directory
@@ -697,7 +698,8 @@ class TestSetupOpenFold:
             / OPENFOLD_MODEL_CHECKPOINT_REGISTRY[DEFAULT_CHECKPOINT_NAME].file_name
         ).exists()
 
-    def test_fresh_parameter_download_all(self, tmp_path):
+    def test_fresh_parameter_download_all(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("OPENFOLD_CACHE", raising=False)
         inputs = iter(
             [
                 str(tmp_path),  # Set cache directory
