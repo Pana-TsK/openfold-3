@@ -538,12 +538,17 @@ class TrainingExperimentRunner(ExperimentRunner):
 
 @contextlib.contextmanager
 def skip_random_init():
-    from unittest.mock import patch
+    import openfold3.core.model.primitives.initialization as m
     def noop_init(*args, **kwargs):
         pass
-    target_path = "openfold3.core.model.primitives.initialization.trunc_normal_init_"
-    with patch(target_path, noop_init):
+
+    original_trunc_normal_init = m.trunc_normal_init_
+    try:
+        m.trunc_normal_init_ = noop_init
         yield
+    finally:
+        m.trunc_normal_init_ = original_trunc_normal_init
+
 
 
 class InferenceExperimentRunner(ExperimentRunner):
