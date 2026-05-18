@@ -149,7 +149,7 @@ class PairformerEmbedding(nn.Module):
                 si_input=si_input,
                 si=si.clone(),  # Avoid inplace ops on si
                 zij=zij,
-                x_pred=x_pred[..., i:i+1, :, :],
+                x_pred=x_pred[..., i : i + 1, :, :],
                 single_mask=single_mask,
                 pair_mask=pair_mask,
                 chunk_size=chunk_size,
@@ -307,19 +307,24 @@ class PairformerEmbedding(nn.Module):
             "si": si.dim() - 2,
             "zij": zij.dim() - 3,
             "single_mask": single_mask.dim() - 1,
-            "pair_mask": pair_mask.dim() - 2
+            "pair_mask": pair_mask.dim() - 2,
         }
 
         if len(set(batch_dim_counts.values())) != 1:
             raise ValueError(
-                f"Inputs have different number of batch dimensions: {batch_dim_counts}. "
-                f"Shapes: x_pred={*x_pred.shape,}, si_input={*si_input.shape,}, "
-                f"si={*si.shape,}, zij={*zij.shape,}, single_mask={*single_mask.shape,}, "
-                f"pair_mask={*pair_mask.shape,}"
+                f"Inputs have different number of batch dimensions:\n"
+                f"{batch_dim_counts}.\n"
+                f"Shapes: x_pred={(*x_pred.shape,)},\n"
+                f"si_input={(*si_input.shape,)},\n"
+                f"si={(*si.shape,)}, zij={(*zij.shape,)},\n"
+                f"single_mask={(*single_mask.shape,)},\n"
+                f"pair_mask={(*pair_mask.shape,)}"
             )
 
         if apply_per_sample and batch_dim_counts["x_pred"] < 1:
-                raise ValueError("apply_per_sample is not compatible with no batch dimensions")
+            raise ValueError(
+                "apply_per_sample is not compatible with no batch dimensions"
+            )
 
         if apply_per_sample:
             si, zij = self.per_sample_pairformer_emb(
