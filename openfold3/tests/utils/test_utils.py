@@ -18,7 +18,7 @@ import unittest
 import torch
 
 from openfold3.core.model.primitives import Linear
-from openfold3.core.utils.chunk_utils import _chunk_slice, chunk_layer
+from openfold3.core.utils.chunk_utils import ChunkSizeTuner, _chunk_slice, chunk_layer
 from openfold3.core.utils.rigid_utils import (
     Rigid,
     Rotation,
@@ -196,3 +196,130 @@ class TestUtils(unittest.TestCase):
                 chunked_flattened = x_flat[i:j]
 
                 self.assertTrue(torch.all(chunked == chunked_flattened))
+
+    def test_chunk_size_tuner_picks_largest_viable(self):
+        # When the cutoff sits between two power-of-2 candidates, the tuner
+        # should pick the largest viable power of 2 at or below the cutoff.
+        cases = [
+            # (max_viable, expected_chunk_size)
+            (1024, 1024),
+            (512, 512),
+            (511, 256),
+            (256, 256),
+            (255, 128),
+            (128, 128),
+            (4, 4),
+            (3, 2),
+            (1, 1),
+        ]
+        for max_viable, expected in cases:
+            with self.subTest(max_viable=max_viable):
+
+                def fn(arg, chunk_size, _max=max_viable):
+                    if chunk_size > _max:
+                        raise RuntimeError("simulated OOM")
+
+                result = ChunkSizeTuner._determine_favorable_chunk_size(
+                    fn, args=(None,), max_chunk_size=1024
+                )
+                self.assertEqual(result, expected)
+
+    def test_chunk_size_tuner_caps_at_max_chunk_size(self):
+        # max_chunk_size is the config-level ceiling: even when much larger
+        # values would fit, the tuner must not exceed it.
+        for max_chunk_size in (4, 16, 128, 512, 1024):
+            with self.subTest(max_chunk_size=max_chunk_size):
+
+                def fn(arg, chunk_size):
+                    return None  # never raises -- any chunk_size "fits"
+
+                result = ChunkSizeTuner._determine_favorable_chunk_size(
+                    fn, args=(None,), max_chunk_size=max_chunk_size
+                )
+                self.assertEqual(result, max_chunk_size)
+
+    def test_chunk_size_tuner_caches_for_same_args(self):
+        # Repeated calls with identical arg shapes should be a cache hit: the
+        # fn must not be re-invoked after the initial tuning pass.
+        tuner = ChunkSizeTuner()
+        tested = []
+
+        def fn(t, chunk_size, tested=tested):
+            tested.append(chunk_size)
+
+        args = (torch.zeros(2, 3, 4),)
+        first = tuner.tune_chunk_size(
+            representative_fn=fn, args=args, max_chunk_size=64
+        )
+        after_first = len(tested)
+        second = tuner.tune_chunk_size(
+            representative_fn=fn, args=args, max_chunk_size=64
+        )
+
+        self.assertEqual(first, second)
+        self.assertGreater(after_first, 0)
+        self.assertEqual(
+            len(tested),
+            after_first,
+            f"fn was re-invoked on cache hit: {tested[after_first:]}",
+        )
+
+    def test_chunk_size_tuner_retunes_for_different_shape(self):
+        # Different arg shapes should invalidate the cache and trigger
+        # re-tuning.
+        tuner = ChunkSizeTuner()
+        tested = []
+
+        def fn(t, chunk_size, tested=tested):
+            tested.append(chunk_size)
+            if chunk_size > t.shape[-1]:
+                raise RuntimeError("simulated OOM")
+
+        first = tuner.tune_chunk_size(
+            representative_fn=fn,
+            args=(torch.zeros(2, 3, 16),),
+            max_chunk_size=256,
+        )
+        after_first = len(tested)
+        second = tuner.tune_chunk_size(
+            representative_fn=fn,
+            args=(torch.zeros(2, 3, 128),),
+            max_chunk_size=256,
+        )
+
+        self.assertNotEqual(
+            first,
+            second,
+            "Chunk size should have been re-tuned for new arg shape",
+        )
+        self.assertGreater(
+            len(tested),
+            after_first,
+            "fn was not re-invoked on cache miss",
+        )
+
+    def test_chunk_size_tuner_non_power_of_two_max(self):
+        # When max_chunk_size isn't a power of 2, it should still be tried as
+        # a candidate (and returned when viable).
+        def fits_all(arg, chunk_size):
+            return None
+
+        self.assertEqual(
+            ChunkSizeTuner._determine_favorable_chunk_size(
+                fits_all, args=(None,), max_chunk_size=500
+            ),
+            500,
+        )
+
+        # And when only powers of 2 below the max are viable, fall back to the
+        # largest such power of 2.
+        def fits_up_to_256(arg, chunk_size):
+            if chunk_size > 256:
+                raise RuntimeError("simulated OOM")
+
+        self.assertEqual(
+            ChunkSizeTuner._determine_favorable_chunk_size(
+                fits_up_to_256, args=(None,), max_chunk_size=500
+            ),
+            256,
+        )
