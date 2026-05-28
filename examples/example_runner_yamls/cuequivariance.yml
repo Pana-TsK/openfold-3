@@ -8,4 +8,3 @@ model_update:
         eval:
           use_cueq_triangle_kernels: true
           use_deepspeed_evo_attention: true
-          chunk_size: 1024
