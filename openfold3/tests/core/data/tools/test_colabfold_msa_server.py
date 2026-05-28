@@ -15,6 +15,7 @@
 """Tests for the ColabFold MSA server module."""
 
 import json
+import shutil
 import textwrap
 from pathlib import Path
 from unittest.mock import patch
@@ -30,6 +31,7 @@ from openfold3.core.data.tools.colabfold_msa_server import (
     ColabFoldQueryRunner,
     ComplexGroup,
     MsaComputationSettings,
+    add_msa_paths_to_iqs,
     augment_main_msa_with_query_sequence,
     collect_colabfold_msa_data,
     get_sequence_hash,
@@ -384,9 +386,7 @@ class TestColabFoldQueryRunner:
         test_sequences = ["TEST", "LONGERTEST"]
 
         for sequence in test_sequences:
-            # dummy tsv output
             query_set = self._construct_monomer_query(sequence)
-            self._make_dummy_template_file(tmp_path)
             msa_compute_settings = MsaComputationSettings(
                 msa_file_format=msa_file_format,
                 server_user_agent="test-agent",
@@ -427,6 +427,11 @@ class TestColabFoldQueryRunner:
                 assert t == t_expected, f"Target length mismatch: {t} != {t_expected}"
                 assert e == e_expected, f"Feature size mismatch: {e} != {e_expected}"
 
+            # Clean up raw directory after running test
+            # This is normally performed in InferenceRunner.cleanup_msa_dir
+            # but that isn't called in this test.
+            shutil.rmtree(tmp_path / "raw", ignore_errors=True)
+
         # Test contents of mapping file after all runs
         with open(tmp_path / "mappings/seq_to_rep_id.json") as f:
             assert set(json.load(f).keys()) == set(test_sequences), (
@@ -439,7 +444,9 @@ class TestColabFoldQueryRunner:
         mock_query,
         tmp_path,
     ):
-        """Test that empty pdb70.m8 file is handled gracefully without crashing."""
+        """Test that empty pdb70.m8 file is handled gracefully without crashing.
+        Runs logic in `preprocess_colabfold_msas` manually in order to add assertions within the run.
+        """
         test_sequence = "TESTSEQUENCE"
         query = self._construct_monomer_query(test_sequence)
 
@@ -475,19 +482,11 @@ class TestColabFoldQueryRunner:
                 "Expected no template files to be created when m8 file is empty"
             )
 
-        # Test preprocess_colabfold_msas with empty template file
-        msa_compute_settings = MsaComputationSettings(
-            msa_file_format="npz",
-            server_user_agent="test-agent",
-            server_url="https://dummy.url",
-            save_mappings=True,
-            msa_output_directory=tmp_path,
-            cleanup_msa_dir=False,
-        )
-
-        # Call preprocess_colabfold_msas - should not raise any exception
-        processed_query_set = preprocess_colabfold_msas(
-            inference_query_set=query, compute_settings=msa_compute_settings
+        # Continue with inner loop of `preprocess_colabfold_msas` to test template chain assignment
+        processed_query_set = add_msa_paths_to_iqs(
+            inference_query_set=query,
+            colabfold_mapper=mapper,
+            output_directory=tmp_path,
         )
 
         # Verify that template fields are None/empty for all chains
@@ -503,6 +502,29 @@ class TestColabFoldQueryRunner:
                     f"{chain.chain_ids} of query {query_name} when template file"
                     f"is empty, but got {chain.template_entry_chain_ids}"
                 )
+
+    def test_preprocess_raises_if_raw_dir_exists(self, tmp_path):
+        """preprocess_colabfold_msas should raise FileExistsError if raw/ exists.
+
+        A leftover raw/ directory from a prior crashed run contains stale
+        out.tar.gz files that would be silently reused for the wrong query.
+        """
+        query = self._construct_monomer_query("TESTSEQUENCE")
+        msa_compute_settings = MsaComputationSettings(
+            msa_file_format="npz",
+            server_user_agent="test-agent",
+            server_url="https://dummy.url",
+            msa_output_directory=tmp_path,
+            cleanup_msa_dir=False,
+        )
+
+        stale_raw_dir = tmp_path / "raw"
+        stale_raw_dir.mkdir(parents=True)
+
+        with pytest.raises(FileExistsError, match="raw"):
+            preprocess_colabfold_msas(
+                inference_query_set=query, compute_settings=msa_compute_settings
+            )
 
 
 class TestRemapObsoletePdb:

@@ -1141,6 +1141,16 @@ def preprocess_colabfold_msas(
     if compute_settings.save_mappings:
         save_colabfold_mappings(colabfold_mapper, output_directory)
 
+    # Abort early if a stale raw directory exists — it contains unvalidated
+    # out.tar.gz files that would be silently reused for the wrong query.
+    raw_dir = output_directory / "raw"
+    if raw_dir.exists():
+        raise FileExistsError(
+            f"ColabFold raw directory already exists: {raw_dir}\n"
+            "This is likely left over from a previous failed run. "
+            "Please remove it before starting a new run."
+        )
+
     # Run batch queries for main and paired MSAs
     colabfold_query_runner = ColabFoldQueryRunner(
         colabfold_mapper=colabfold_mapper,
