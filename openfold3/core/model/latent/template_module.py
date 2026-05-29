@@ -580,7 +580,11 @@ class TemplateEmbedderAllAtom(nn.Module):
                 _mask_trans=_mask_trans,
             )
 
-            assert sys.getrefcount(t) == 2
+            # For python < 3.14, sys.getrefcount generates its own reference
+            # This issue is resolved in python 3.14, and so below is a workaround
+            # See https://docs.python.org/3.14/whatsnew/3.14.html#whatsnew314-refcount
+            # and https://github.com/root-project/root/issues/18988 for more details
+            assert sys.getrefcount(t) + int(sys.version_info >= (3, 14)) == 2
 
             t_out[..., i : i + 1, :, :, :] = t.cpu()
 

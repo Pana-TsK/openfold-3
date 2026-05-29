@@ -22,6 +22,8 @@
 #                                                     everything else from pypi
 #                                                     keeping the environments as sane and consistent as possible
 #                                                     (useful if requiring deps not yet in conda-forge)
+#   - openfold3-rocm7: environment for AMD GPU support with ROCm 7.x (linux-64 only at the moment)
+#   - openfold3-msa: environment for OpenFold3 style MSA generation (with snakemake, hmmer, and hhsuite)
 #
 # The current environments pass all inference tests available in each platform.
 # (aarch64 and osx-64 are untested at the moment).
@@ -143,6 +145,9 @@ openfold3-rocm7 = { no-default-feature = true, features = [
     "openfold3-editable",
     "tests", 
 ] }
+openfold3-msa = { no-default-feature = true, features = [
+    "openfold3-msa",
+] }
 
 # Maybe we should have solve-groups, but how to conciliate between e.g. cu12 and cu13?
 # N.B. at the moment all these are editable installs
@@ -155,10 +160,6 @@ openfold3-rocm7 = { no-default-feature = true, features = [
 
 [feature.openfold3-editable.pypi-dependencies]
 openfold3 = { path = ".", editable = true }
-
-[feature.openfold3-editable-full.target.linux.dependencies]
-# No compatible wheels for cuequivariance<0.8, python 3.14 and linux-aarch64
-python = "<3.14"
 
 [feature.openfold3-editable-full.pypi-dependencies]
 openfold3 = { path = ".", editable = true, extras = ["deepspeed", "dev"] }
@@ -200,9 +201,6 @@ pdbeccdutils = "*"
 
 # --- Bioinformatics & Workflows
 kalign-python = "*"
-hmmer = "*"
-hhsuite = "*"
-snakemake = "*"
 
 # --- Misc
 pyyaml = "*"
@@ -212,10 +210,7 @@ wandb = "*"
 func_timeout = "*"
 tqdm = "*"
 typing-extensions = "*"
-# python-lmdb from conda-forge is broken on aarch64/Python 3.13
-# (cpython backend: undefined symbol pthread_atfork; cffi fallback: missing build sources)
-# Use the PyPI package instead, which ships a working pre-compiled extension.
-# python-lmdb = "*"
+python-lmdb = ">=2.2.0"
 
 # --- Downloading stuff
 requests = "*"
@@ -239,11 +234,10 @@ myst-parser = "*"
 furo = "*"
 pre-commit = "*"
 
-[feature.openfold3-cpu.pypi-dependencies]
-lmdb = "*"
 
 [feature.openfold3-cpu.target.linux-64.dependencies]
 mkl = "*"
+
 
 # --- Pytorch & Cuda
 
@@ -318,6 +312,8 @@ torch = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
   deepspeed = ">=0.18.7"
 
   [feature.deepspeed-build.dependencies]
+  # At the time of writing (May 29 2026), deepspeed kernels cannot be compiled with CUDA >=13.3
+  cuda-version = "<13.3"
   # These are only needed to build local extensions the first time
   # Think on whether we want to delete them afterward and how it would play with the user
   ninja = "*"
@@ -378,6 +374,25 @@ cuequivariance-ops-torch-cu13 = ">=0.8"
 cuequivariance = ">=0.8"
 cuequivariance-torch = ">=0.8"
 cuequivariance-ops-torch-cu13 = ">=0.8"
+
+
+# --- Openfold3 style MSA generation
+
+# snakemake, hmmer, and hhsuite are only used when computing OpenFold3 style MSAs (docs)
+#   https://openfold-3.readthedocs.io/en/latest/precomputed_msa_generation_how_to.html
+#   https://github.com/aqlaboratory/openfold-3/blob/main/scripts
+# This mirrors aln_env.yml but unpins everything (note that then we do not need the pypi pinning)
+#   https://github.com/aqlaboratory/openfold-3/blob/main/scripts/snakemake_msa/aln_env.yml
+[feature.openfold3-msa.dependencies]
+python = "*"    # 3.10
+biopython = "*"
+hmmer = "*"     # 3.3.2
+hhsuite = "*"   # 3.3.0
+awscli = "*"    # 2.32.17
+# N.B. at the time of writing, snakemake still does not support python 3.14
+# https://github.com/snakemake/snakemake/pull/3739
+snakemake = "*"  # 7.32.4
+
 
 # --- Tasks
 
