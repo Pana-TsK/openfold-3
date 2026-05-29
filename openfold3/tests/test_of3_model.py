@@ -65,7 +65,8 @@ class TestOF3Model:
         )
         if chunk_size is not None:
             config.settings.memory.eval.chunk_size = chunk_size
-            config.settings.memory.train.chunk_size = chunk_size
+            assert not train
+
         config.architecture.loss_module.diffusion.chunk_size = 16
 
         of3 = OpenFold3AllAtom(config).to(device=device, dtype=dtype)
