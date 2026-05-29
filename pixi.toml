@@ -312,6 +312,8 @@ torch = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
   deepspeed = ">=0.18.7"
 
   [feature.deepspeed-build.dependencies]
+  # At the time of writing (May 29 2026), deepspeed kernels cannot be compiled with CUDA >=13.3
+  cuda-version = "<13.3"
   # These are only needed to build local extensions the first time
   # Think on whether we want to delete them afterward and how it would play with the user
   ninja = "*"
