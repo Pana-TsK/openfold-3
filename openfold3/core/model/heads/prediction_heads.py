@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-
 import torch
 import torch.nn as nn
 from ml_collections import ConfigDict
@@ -23,6 +21,7 @@ from ml_collections import ConfigDict
 import openfold3.core.config.default_linear_init_config as lin_init
 from openfold3.core.model.latent.pairformer import PairFormerStack
 from openfold3.core.model.primitives import LayerNorm, Linear
+from openfold3.core.model.utils import assert_sole_holder
 from openfold3.core.utils.atomize_utils import max_atom_per_token_masked_select
 
 
@@ -162,13 +161,8 @@ class PairformerEmbedding(nn.Module):
             )
 
             if offload_inference:
-                # In Python < 3.14, sys.getrefcount() creates a temporary reference
-                # for its own argument; Python 3.14 removed this. See:
-                # https://docs.python.org/3.14/whatsnew/3.14.html#whatsnew314-refcount
-                assert sys.getrefcount(si_chunk) + int(sys.version_info >= (3, 14)) == 2
-                assert (
-                    sys.getrefcount(zij_chunk) + int(sys.version_info >= (3, 14)) == 2
-                )
+                assert_sole_holder(si_chunk)
+                assert_sole_holder(zij_chunk)
 
             si_out[..., i : i + 1, :, :] = si_chunk.to(device=device)
             zij_out[..., i : i + 1, :, :, :] = zij_chunk.to(device=device)
