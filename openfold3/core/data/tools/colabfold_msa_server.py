@@ -112,6 +112,12 @@ def query_colabfold_msa_server(
 
     submission_endpoint = "ticket/pair" if use_pairing else "ticket/msa"
 
+    # Normalize the host: a pydantic Url stringifies with a trailing slash, which
+    # would produce a doubled slash (e.g. ".../com//ticket/msa") in the f-strings
+    # below. The server 301-redirects the doubled slash, and requests downgrades
+    # the POST to GET while dropping the body, yielding a misleading "invalid ID".
+    host_url = str(host_url).rstrip("/")
+
     headers = {}
     if user_agent != "":
         headers["User-Agent"] = user_agent

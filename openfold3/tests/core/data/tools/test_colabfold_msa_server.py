@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from pydantic_core import Url
 
 from openfold3.core.data.framework.data_module import DataModule, DataModuleConfig
 from openfold3.core.data.pipelines.preprocessing.template import (
@@ -36,6 +37,7 @@ from openfold3.core.data.tools.colabfold_msa_server import (
     collect_colabfold_msa_data,
     get_sequence_hash,
     preprocess_colabfold_msas,
+    query_colabfold_msa_server,
     remap_colabfold_template_chain_ids,
 )
 from openfold3.projects.of3_all_atom.config.dataset_config_components import MSASettings
@@ -254,6 +256,29 @@ class TestColabFoldQueryRunner:
         raw_main_dir.mkdir(parents=True, exist_ok=True)
         # Create an empty file (0 bytes)
         (raw_main_dir / "pdb70.m8").touch()
+
+    @patch("openfold3.core.data.tools.colabfold_msa_server.requests.post")
+    def test_submit_url_has_no_double_slash_with_url_host(self, mock_post, tmp_path):
+        """Regression: a pydantic Url host (trailing slash) must not yield
+        '...com//ticket/msa'. The server 301-redirects the doubled slash, which
+        makes requests downgrade the POST to GET and drop the body, so the
+        server returns 'invalid ID' and the run fails with a misleading error.
+        """
+        # Make submit() return ERROR so the function exits right after the POST,
+        # before any polling/download -- we only care about the URL that was built.
+        mock_post.return_value.json.return_value = {"status": "ERROR"}
+
+        with pytest.raises(Exception, match="MMseqs2 API is giving errors"):
+            query_colabfold_msa_server(
+                ["TESTSEQ"],
+                prefix=tmp_path / "raw",
+                user_agent="test-agent",
+                host_url=Url("https://api.colabfold.com"),  # str() -> trailing slash
+            )
+
+        called_url = mock_post.call_args.args[0]
+        assert called_url == "https://api.colabfold.com/ticket/msa", called_url
+        assert "//" not in called_url.split("://", 1)[1], "doubled slash in path"
 
     @patch(_MOCK_FETCH_TARGET, side_effect=_mock_fetch_label_to_author)
     @patch(_MOCK_QUERY_TARGET)
