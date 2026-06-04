@@ -323,7 +323,7 @@ class TestUtils(unittest.TestCase):
                 )
                 self.assertEqual(result, max_chunk_size)
 
-    def test_chunk_size_tuner_retunes_for_different_shape(self):
+    def test_chunk_size_tuner_retunes_different_shape(self):
         # Different arg shapes should invalidate the cache and trigger
         # re-tuning.
         tuner = ChunkSizeTuner()
@@ -349,7 +349,7 @@ class TestUtils(unittest.TestCase):
             "Chunk size should have been re-tuned for new arg shape",
         )
 
-    def test_chunk_size_tuner_handles_arg_rank_change(self):
+    def test_chunk_size_tuner_retunes_different_rank(self):
         tuner = ChunkSizeTuner()
 
         def fn(t, chunk_size):
@@ -374,7 +374,7 @@ class TestUtils(unittest.TestCase):
             first, second, "Chunk size should have been re-tuned for new arg rank"
         )
 
-    def test_chunk_size_tuner_handles_dtype_bytes_change(self):
+    def test_chunk_size_tuner_retunes_different_dtype_bytes(self):
         tuner = ChunkSizeTuner()
 
         def fn(t, chunk_size):
@@ -399,7 +399,7 @@ class TestUtils(unittest.TestCase):
             first, second, "Chunk size should have been re-tuned for new dtype bytes"
         )
 
-    def test_chunk_size_tuner_handles_arg_count_change(self):
+    def test_chunk_size_tuner_retunes_different_arg_count(self):
         tuner = ChunkSizeTuner()
 
         def fn(*args, chunk_size):
