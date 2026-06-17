@@ -24,6 +24,7 @@ from unittest.mock import patch
 
 import ml_collections as mlc
 import pytest
+from click.testing import CliRunner
 from pytorch_lightning.loggers import WandbLogger
 
 import openfold3.core.model.primitives.initialization as initialization
@@ -735,9 +736,30 @@ class TestRemoveQuerySetDuplicates:
 
 
 class TestSetupOpenFold:
+    def test_run_with_defaults(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("OPENFOLD_CACHE", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        with patch(
+            "openfold3.setup_openfold.download_s3_file",
+            side_effect=_fake_download_s3_file,
+        ):
+            result = CliRunner().invoke(setup_openfold.main, ["--run-with-defaults"])
+
+        assert result.exit_code == 0, result.output
+        expected_cache = tmp_path / ".openfold3"
+        assert (expected_cache / CHECKPOINT_ROOT_FILENAME).exists()
+        assert (expected_cache / CHECKPOINT_ROOT_FILENAME).read_text() == str(
+            expected_cache
+        )
+        assert (
+            expected_cache
+            / OPENFOLD_MODEL_CHECKPOINT_REGISTRY[DEFAULT_CHECKPOINT_NAME].file_name
+        ).exists()
+
     def test_fresh_parameter_default_download(self, tmp_path, monkeypatch):
         monkeypatch.delenv("OPENFOLD_CACHE", raising=False)
-        inputs = iter(
+        stdin_input = "\n".join(
             [
                 str(tmp_path),  # Set cache directory
                 "",  # Use default (cache) directory for params directory
@@ -746,15 +768,13 @@ class TestSetupOpenFold:
             ]
         )
 
-        with (
-            patch("builtins.input", side_effect=inputs),
-            patch(
-                "openfold3.setup_openfold.download_s3_file",
-                side_effect=_fake_download_s3_file,
-            ),
+        with patch(
+            "openfold3.setup_openfold.download_s3_file",
+            side_effect=_fake_download_s3_file,
         ):
-            setup_openfold.main()
+            result = CliRunner().invoke(setup_openfold.main, [], input=stdin_input)
 
+        assert result.exit_code == 0, result.output
         # Check that the checkpoint root file exists and has the expected path
         assert (tmp_path / CHECKPOINT_ROOT_FILENAME).exists()
         assert (tmp_path / CHECKPOINT_ROOT_FILENAME).read_text() == str(tmp_path)
@@ -766,7 +786,7 @@ class TestSetupOpenFold:
 
     def test_fresh_parameter_download_all(self, tmp_path, monkeypatch):
         monkeypatch.delenv("OPENFOLD_CACHE", raising=False)
-        inputs = iter(
+        stdin_input = "\n".join(
             [
                 str(tmp_path),  # Set cache directory
                 "",  # Use default (cache) directory for params directory
@@ -775,15 +795,13 @@ class TestSetupOpenFold:
             ]
         )
 
-        with (
-            patch("builtins.input", side_effect=inputs),
-            patch(
-                "openfold3.setup_openfold.download_s3_file",
-                side_effect=_fake_download_s3_file,
-            ),
+        with patch(
+            "openfold3.setup_openfold.download_s3_file",
+            side_effect=_fake_download_s3_file,
         ):
-            setup_openfold.main()
+            result = CliRunner().invoke(setup_openfold.main, [], input=stdin_input)
 
+        assert result.exit_code == 0, result.output
         # Check that the checkpoint root file exists and has the expected path
         assert (tmp_path / CHECKPOINT_ROOT_FILENAME).exists()
         assert (tmp_path / CHECKPOINT_ROOT_FILENAME).read_text() == str(tmp_path)

@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 import biotite.setup_ccd
+import click
 
 from openfold3.core.utils.s3 import download_s3_file, s3_file_matches_local
 from openfold3.entry_points.parameters import (
@@ -41,20 +42,18 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
-def setup_openfold_cache() -> tuple[Path, Path]:
+def setup_openfold_cache(*, run_with_defaults: bool = False) -> tuple[Path, Path]:
     """Set up the OpenFold cache directory."""
     logger.info("Setting up OpenFold cache directory...")
 
     default_cache = Path.home() / ".openfold3"
-    user_input = input(
-        f"Please specify the OpenFold cache directory (default: {default_cache}): "
-    ).strip()
-
-    # Use user input if provided, otherwise use default
-    if user_input:
-        openfold_cache = Path(user_input).expanduser()
-    else:
+    if run_with_defaults:
         openfold_cache = default_cache
+    else:
+        user_input = input(
+            f"Please specify the OpenFold cache directory (default: {default_cache}): "
+        ).strip()
+        openfold_cache = Path(user_input).expanduser() if user_input else default_cache
 
     openfold_cache.mkdir(parents=True, exist_ok=True)
     ckpt_root_file = openfold_cache / "ckpt_root"
@@ -65,7 +64,7 @@ def setup_openfold_cache() -> tuple[Path, Path]:
 
 
 def setup_param_directory(
-    openfold_cache: Path, ckpt_root_file: Path
+    openfold_cache: Path, ckpt_root_file: Path, *, run_with_defaults: bool = False
 ) -> tuple[Path, bool]:
     """Check and set up the parameter directory."""
 
@@ -79,6 +78,9 @@ def setup_param_directory(
         logger.info(
             f"OpenFold3 parameters may already be installed at: {existing_path}"
         )
+        if run_with_defaults:
+            logger.info("Using existing parameters (run-with-defaults).")
+            return existing_path, False  # Don't download
         logger.info("Do you want to:")
         logger.info("1) Use existing parameters (skip download)")
         logger.info("2) Download to a new location")
@@ -106,16 +108,14 @@ def setup_param_directory(
     else:
         # First time setup
         logger.info("Downloading OpenFold3 parameters...")
-        user_input = input(
-            "Please specify the directory for parameter download "
-            f"(default: {openfold_cache}): "
-        ).strip()
-
-        # Use user input if provided, otherwise use default (the cache directory)
-        if user_input:
-            param_dir = Path(user_input).expanduser()
-        else:
+        if run_with_defaults:
             param_dir = openfold_cache
+        else:
+            user_input = input(
+                "Please specify the directory for parameter download "
+                f"(default: {openfold_cache}): "
+            ).strip()
+            param_dir = Path(user_input).expanduser() if user_input else openfold_cache
 
     # Create the directory if it doesn't exist
     param_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +129,7 @@ def setup_param_directory(
     return param_dir, True  # Proceed with download
 
 
-def download_parameters(param_dir) -> None:
+def download_parameters(param_dir, *, run_with_defaults: bool = False) -> None:
     """Perform the parameter download."""
     # Exclude incompatible checkpoints:
     all_checkpoints = [
@@ -138,12 +138,18 @@ def download_parameters(param_dir) -> None:
         if name not in LEGACY_CHECKPOINTS
     ]
 
-    logger.info("Select parameters to download:")
-    logger.info(f"1) Download only the default checkpoint ({DEFAULT_CHECKPOINT_NAME})")
-    logger.info(f"2) Download all parameters ({', '.join(all_checkpoints)}) (default)")
-    logger.info("3) Download a specific parameter by name")
-
-    choice = input("Enter your choice (1/2/3, default: 1): ").strip() or "1"
+    if run_with_defaults:
+        choice = "1"
+    else:
+        logger.info("Select parameters to download:")
+        logger.info(
+            f"1) Download only the default checkpoint ({DEFAULT_CHECKPOINT_NAME})"
+        )
+        logger.info(
+            f"2) Download all parameters ({', '.join(all_checkpoints)}) (default)"
+        )
+        logger.info("3) Download a specific parameter by name")
+        choice = input("Enter your choice (1/2/3, default: 1): ").strip() or "1"
 
     logger.info("Starting parameter download...")
 
@@ -198,8 +204,11 @@ def setup_biotite_ccd(*, ccd_path: Path, force_download: bool) -> bool:
         return False
 
 
-def run_integration_tests() -> None:
+def run_integration_tests(*, run_with_defaults: bool = False) -> None:
     """Run integration tests."""
+    if run_with_defaults:
+        logger.info("Skipping integration tests (run-with-defaults).")
+        return
     confirm = input("Run integration tests? (yes/no)")
     if confirm.lower() not in ["yes", "y"]:
         logger.info("Skipping integration tests, exiting setup.")
@@ -231,23 +240,38 @@ def run_integration_tests() -> None:
     logger.info("Integration tests passed!")
 
 
-def main():
-    """Main execution."""
+@click.command()
+@click.option(
+    "--run-with-defaults",
+    is_flag=True,
+    default=False,
+    help=(
+        "Non-interactively run setup with all default options: use the default "
+        "cache directory, download only the default checkpoint, and skip "
+        "integration tests."
+    ),
+)
+def main(run_with_defaults: bool = False):
+    """Set up OpenFold3 parameters."""
     # Step 1: Set up OpenFold cache directory
-    openfold_cache, ckpt_root_file = setup_openfold_cache()
+    openfold_cache, ckpt_root_file = setup_openfold_cache(
+        run_with_defaults=run_with_defaults
+    )
 
     # Step 2: Set up checkpoint directory
-    param_dir, should_download = setup_param_directory(openfold_cache, ckpt_root_file)
+    param_dir, should_download = setup_param_directory(
+        openfold_cache, ckpt_root_file, run_with_defaults=run_with_defaults
+    )
 
     # Step 3: Perform download if needed
     if should_download:
-        download_parameters(param_dir)
+        download_parameters(param_dir, run_with_defaults=run_with_defaults)
 
     # Step 4: Setup CCD with biotite
     setup_biotite_ccd(ccd_path=biotite.setup_ccd.OUTPUT_CCD, force_download=False)
 
     # Step 5: Run tests (always run regardless of download status)
-    run_integration_tests()
+    run_integration_tests(run_with_defaults=run_with_defaults)
 
 
 if __name__ == "__main__":
