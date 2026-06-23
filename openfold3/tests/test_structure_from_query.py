@@ -126,7 +126,9 @@ def _serialize_structure_with_ref_mols(
 def test_structure_from_query(query: Query, ndarrays_regression):
     """Tests that the generated structure and reference molecules matches gt."""
     structure_with_ref_mols = structure_with_ref_mols_from_query(query)
-    ndarrays_regression.check(_serialize_structure_with_ref_mols(structure_with_ref_mols))
+    ndarrays_regression.check(
+        _serialize_structure_with_ref_mols(structure_with_ref_mols)
+    )
 
 
 def test_smiles_with_explicit_hydrogen():
