@@ -210,7 +210,6 @@ class TestUtils(unittest.TestCase):
         first = tuner.tune_chunk_size(
             representative_fn=spy_fn,
             args=(torch.randn(2, 3, 4, 5),),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
 
@@ -218,7 +217,6 @@ class TestUtils(unittest.TestCase):
         second = tuner.tune_chunk_size(
             representative_fn=spy_fn,
             args=(torch.randn(2, 3, 4, 5),),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
 
@@ -246,7 +244,7 @@ class TestUtils(unittest.TestCase):
                         raise RuntimeError("simulated OOM")
 
                 ChunkSizeTuner._determine_favorable_chunk_size(
-                    fn, args=(None,), min_chunk_size=4, max_chunk_size=1024
+                    fn, args=(None,), max_chunk_size=1024
                 )
 
                 self.assertEqual(
@@ -360,13 +358,11 @@ class TestUtils(unittest.TestCase):
         first = tuner.tune_chunk_size(
             representative_fn=fn,
             args=(torch.zeros(2, 3, 4, 5),),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
         second = tuner.tune_chunk_size(
             representative_fn=fn,
             args=(torch.zeros(2, 3, 4, 5, 6),),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
 
@@ -385,13 +381,11 @@ class TestUtils(unittest.TestCase):
         first = tuner.tune_chunk_size(
             representative_fn=fn,
             args=(torch.zeros(2, 3, 4, 5, dtype=torch.float32),),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
         second = tuner.tune_chunk_size(
             representative_fn=fn,
             args=(torch.zeros(2, 3, 4, 5, dtype=torch.bfloat16),),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
 
@@ -410,13 +404,11 @@ class TestUtils(unittest.TestCase):
         first = tuner.tune_chunk_size(
             representative_fn=fn,
             args=(1, 2, 3, 4, 5),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
         second = tuner.tune_chunk_size(
             representative_fn=fn,
             args=(1, 2, 3, 4, 5, 6),
-            min_chunk_size=4,
             max_chunk_size=256,
         )
 
