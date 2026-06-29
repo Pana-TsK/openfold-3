@@ -60,6 +60,7 @@ optional-dependencies.dev = [
     "pytest-cov",
     "pytest-benchmark",
     "pytest-regressions",
+    "pytest-vcr",
     "ruff",
     "pre-commit",
 
