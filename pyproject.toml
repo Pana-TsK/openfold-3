@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openfold3"
-version = "0.4.2.dev2" 
+version = "0.4.2.dev3" 
 # dynamic = ["version"]
 authors = [
     { name = "OpenFold Team", email = "support@openfold.io" }
@@ -37,7 +37,7 @@ dependencies = [
     "ml-collections",
     "pytorch-lightning >=2.1",
     "biotite",
-    "rdkit",
+    "rdkit<2026", # aqlaboratory/openfold-3/issues/285 
     "pdbeccdutils",
     "kalign-python",
     "requests",
@@ -75,7 +75,6 @@ optional-dependencies.cuequivariance = [
     "torch>=2.7",
 ]
 optional-dependencies.deepspeed = [
-    "nvidia-cutlass",
     "deepspeed>=0.18.7",
 ]
 
@@ -103,7 +102,7 @@ test = [
 
 
 [tool.setuptools_scm]
-fallback_version = "0.4.2-dev2"
+fallback_version = "0.4.2-dev3"
 
 [tool.setuptools]
 include-package-data = true
