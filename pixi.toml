@@ -100,9 +100,6 @@ platforms = [
 #   * as we now use wildcard platform target selectors (this helped)
 requires-pixi = ">=0.71.1"
 
-# Playing with pixi build
-preview = ["pixi-build"]
-
 # --- Environments
 
 [environments]
