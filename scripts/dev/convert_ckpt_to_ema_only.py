@@ -30,6 +30,7 @@ torch.serialization.add_safe_globals(
         operator.add,
         mlc.config_dict._Op,
         PosixPath,
+        (PosixPath, "pathlib._local.PosixPath"),
     ]
 )
 

@@ -21,7 +21,7 @@ import shutil
 import sys
 from abc import ABC, abstractmethod
 from functools import cached_property, wraps
-from pathlib import Path
+from pathlib import Path, PosixPath
 from typing import Any
 
 import ml_collections as mlc
@@ -82,6 +82,8 @@ torch.serialization.add_safe_globals(
         float,
         operator.add,
         mlc.config_dict._Op,
+        PosixPath,
+        (PosixPath, "pathlib._local.PosixPath"),
     ]
 )
 
