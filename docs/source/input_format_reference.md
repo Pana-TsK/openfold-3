@@ -113,6 +113,7 @@ MSA usage toggles (`use_msas`, `use_main_msas`, `use_paired_msas`) are set at th
     - A dictionary mapping residue indices (1-based) to non-canonical residue names.
     - Note that MSA computation will only refer to the primary `sequence`.
     - Example: `{"1": "MHO", "5": "SEP"}`
+    - Residues not in the standard CCD can be defined in a custom CCD file, see `ccd_file_path` in the {doc}`configuration reference <configuration_reference>`.
 
   - `main_msa_file_paths` *(str | list[str], optional, default = null)*
     - Path or list of paths to the MSA files for this chain.
@@ -238,6 +239,7 @@ MSA usage toggles (`use_msas`, `use_main_msas`, `use_paired_msas`) are set at th
 
   - `ccd_codes` *(str | list[str], required if smiles not given)*
     - Three-letter CCD code for the ligand component. 
+    - Components not in the standard CCD can be defined in a custom CCD file, see `ccd_file_path` in the {doc}`configuration reference <configuration_reference>`.
     - Support for providing a list of CCD codes (for instance for polymeric ligands) will be supported in a later release of the inference pipeline.
     - Mutually exclusive with `smiles`.
 

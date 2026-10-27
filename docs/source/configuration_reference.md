@@ -149,7 +149,7 @@ Configures MSA, template, and pocket sampling feature generation.
 **Pydantic Model**: [`InferenceDatasetConfigKwargs`](https://github.com/aqlaboratory/openfold-3/blob/main/openfold3/projects/of3_all_atom/config/dataset_configs.py#L270)
 
 **All Options**:
-- `ccd_file_path` *(FilePath | None)*: Path to Chemical Component Dictionary file, uses CCD from Biotite if null (default: `null`)
+- `ccd_file_path` *(FilePath | None)*: Path to a custom Chemical Component Dictionary (mmCIF, one data block per component). Ligand `ccd_codes` and `non_canonical_residues` found in it are built from it, which allows using custom components. The file only needs to contain the custom (or overriding) components; anything not in it is taken from Biotite's CCD. Uses only the CCD from Biotite if null (default: `null`)
 - `msa` *(MSASettings)*: MSA processing settings (see below)
 - `template` *(TemplateSettings)*: Template processing settings (see below)
 - `pocket_sampling` *(PocketSamplingSettings)*: Pocket-guided ligand proposal sampling settings (see below)

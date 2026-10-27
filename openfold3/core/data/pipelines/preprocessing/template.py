@@ -89,7 +89,10 @@ from openfold3.core.data.primitives.sequence.template import (
     match_template_chain_and_sequence,
     parse_representatives,
 )
-from openfold3.core.data.primitives.structure.component import BiotiteCCDWrapper
+from openfold3.core.data.primitives.structure.component import (
+    BiotiteCCDWrapper,
+    CustomCCDWithFallback,
+)
 from openfold3.core.data.primitives.structure.metadata import (
     get_asym_id_to_canonical_seq_dict,
     get_cif_block,
@@ -1887,7 +1890,9 @@ class TemplatePreprocessor:
 
         # TODO: update with set_ccd biotite method instead
         if config.ccd_file_path is not None:
-            self.ccd = pdbx.CIFFile.read(config.ccd_file_path)
+            self.ccd: CIFFile | BiotiteCCDWrapper | CustomCCDWithFallback = (
+                CustomCCDWithFallback(pdbx.CIFFile.read(config.ccd_file_path))
+            )
         else:
             self.ccd = BiotiteCCDWrapper()
 
@@ -2890,7 +2895,9 @@ class TemplateStructurePreprocessor:
         self.structure_array_directory = config.structure_array_directory
 
         if config.ccd_file_path is not None:
-            self.ccd = pdbx.CIFFile.read(config.ccd_file_path)
+            self.ccd: CIFFile | BiotiteCCDWrapper | CustomCCDWithFallback = (
+                CustomCCDWithFallback(pdbx.CIFFile.read(config.ccd_file_path))
+            )
         else:
             self.ccd = BiotiteCCDWrapper()
 

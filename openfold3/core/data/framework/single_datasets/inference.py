@@ -59,7 +59,10 @@ from openfold3.core.data.pipelines.sample_processing.msa import (
 from openfold3.core.data.pipelines.sample_processing.template import (
     process_template_structures_of3,
 )
-from openfold3.core.data.primitives.structure.component import BiotiteCCDWrapper
+from openfold3.core.data.primitives.structure.component import (
+    BiotiteCCDWrapper,
+    CustomCCDWithFallback,
+)
 from openfold3.core.data.primitives.structure.query import (
     StructureWithReferenceMolecules,
     structure_with_ref_mols_from_query,
@@ -119,9 +122,13 @@ class InferenceDataset(Dataset):
         self.pocket_sampling_settings = dataset_config.pocket_sampling
 
         # Parse CCD
+        self.custom_ccd: pdbx.CIFFile | None = None
         if dataset_config.ccd_file_path is not None:
             logger.debug("Parsing CCD file.")
-            self.ccd = pdbx.CIFFile.read(dataset_config.ccd_file_path)
+            self.custom_ccd = pdbx.CIFFile.read(dataset_config.ccd_file_path)
+            self.ccd: BiotiteCCDWrapper | CustomCCDWithFallback = CustomCCDWithFallback(
+                self.custom_ccd
+            )
         else:
             self.ccd = BiotiteCCDWrapper()
 
@@ -164,7 +171,9 @@ class InferenceDataset(Dataset):
 
     @staticmethod
     def get_structure_with_ref_mols(
-        query: Query, rng: random.Random | None = None
+        query: Query,
+        rng: random.Random | None = None,
+        ccd: pdbx.CIFFile | None = None,
     ) -> StructureWithReferenceMolecules:
         """Creates a preprocessed AtomArray and reference molecules from the query.
 
@@ -186,6 +195,9 @@ class InferenceDataset(Dataset):
                 The Query object containing the chains to construct the structure from.
             rng (random.Random | None):
                 Conformer generation seed source; defaults to the ambient stdlib RNG.
+            ccd (pdbx.CIFFile | None):
+                Optional user-supplied CCD; components found in it take precedence over
+                Biotite's internal CCD.
 
         Returns:
             StructureWithReferenceMolecules:
@@ -196,6 +208,7 @@ class InferenceDataset(Dataset):
         atom_array, processed_reference_molecules = structure_with_ref_mols_from_query(
             query=query,
             rng=rng,
+            ccd=ccd,
         )
 
         # Add token-related IDs
@@ -325,6 +338,7 @@ class InferenceDataset(Dataset):
         structure_objs = self.get_structure_with_ref_mols(
             query=query,
             rng=rng,
+            ccd=self.custom_ccd,
         )
         preprocessed_atom_array, processed_reference_molecules = structure_objs
 

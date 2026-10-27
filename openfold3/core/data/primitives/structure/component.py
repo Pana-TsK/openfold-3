@@ -17,7 +17,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Generator, Iterable
 from functools import cached_property
-from typing import Literal, NamedTuple, TypeAlias
+from typing import Any, Literal, NamedTuple, TypeAlias
 
 import biotite.structure as struc
 import gemmi
@@ -665,3 +665,24 @@ class BiotiteCCDWrapper(_ImplementsGet):
                 )
 
             return result
+
+
+class CustomCCDWithFallback(_ImplementsGet):
+    """A user-supplied CCD that falls back to Biotite's internal CCD.
+
+    Allows a custom CCD file to only contain additional (or overriding) components,
+    instead of having to be a complete copy of the CCD.
+    """
+
+    def __init__(self, custom_ccd: CIFFile):
+        self.custom_ccd = custom_ccd
+        self._fallback = BiotiteCCDWrapper()
+
+    def __contains__(self, comp_id: str) -> bool:
+        return comp_id in self.custom_ccd or self._fallback.get(comp_id) is not None
+
+    def __getitem__(self, comp_id: str) -> Any:
+        if comp_id in self.custom_ccd:
+            return self.custom_ccd[comp_id]
+
+        return self._fallback[comp_id]

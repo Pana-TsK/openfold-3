@@ -21,12 +21,13 @@ import logging
 import random
 from collections.abc import Iterable
 from functools import lru_cache
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import biotite.structure as struc
 import numpy as np
 from biotite.interface.rdkit import from_mol, to_mol
 from biotite.structure import AtomArray
+from biotite.structure.io import pdbx
 from rdkit import Chem
 
 from openfold3.core.data.pipelines.sample_processing.conformer import (
@@ -70,17 +71,27 @@ get_residue_cached = lru_cache(maxsize=500)(struc.info.residue)
 """Cached residue information retrieval from Biotite to speed up preprocessing."""
 
 
-def get_leaving_atoms(ccd_code: str) -> np.ndarray:
+def get_leaving_atoms(ccd_code: str, ccd: pdbx.CIFFile | None = None) -> np.ndarray:
     """Returns the leaving atoms for a given CCD code.
 
     Args:
         ccd_code (str):
             The CCD code of the residue to get the leaving atoms for.
+        ccd (pdbx.CIFFile | None):
+            Optional user-supplied CCD. Components found in it take precedence over
+            Biotite's internal CCD. Defaults to None.
 
     Returns:
         np.ndarray:
             An array of leaving atom names for the given CCD code.
     """
+    if ccd is not None and ccd_code in ccd:
+        chem_comp_atom = ccd[ccd_code]["chem_comp_atom"]
+        leaving_atom_flag = chem_comp_atom["pdbx_leaving_atom_flag"].as_array()
+        atom_names = chem_comp_atom["atom_id"].as_array()
+        custom_leaving_atoms: np.ndarray = atom_names[leaving_atom_flag == "Y"]
+        return custom_leaving_atoms
+
     leaving_atom_flag = struc.info.get_from_ccd(
         category_name="chem_comp_atom",
         comp_id=ccd_code,
@@ -102,11 +113,13 @@ def atom_array_from_ccd_code(
     chain_id: str,
     res_id: int = 1,
     molecule_type: MoleculeType | None = None,
+    ccd: pdbx.CIFFile | None = None,
 ) -> AtomArray:
     """Creates an AtomArray from a CCD code.
 
-    Fetches the residue information from Biotite and constructs an AtomArray with the
-    specified chain ID, residue ID, and molecule type.
+    Fetches the residue information from the user-supplied CCD if it contains the
+    component, otherwise from Biotite's internal CCD, and constructs an AtomArray with
+    the specified chain ID, residue ID, and molecule type.
 
     Args:
         ccd_code (str):
@@ -118,8 +131,14 @@ def atom_array_from_ccd_code(
         molecule_type (MoleculeType | None):
             The MoleculeType of the molecule. If None, no molecule type annotation will
             be set. Defaults to None.
+        ccd (pdbx.CIFFile | None):
+            Optional user-supplied CCD. Components found in it take precedence over
+            Biotite's internal CCD. Defaults to None.
     """
-    res_array = get_residue_cached(ccd_code)
+    if ccd is not None and ccd_code in ccd:
+        res_array = pdbx.get_component(ccd, data_block=ccd_code)
+    else:
+        res_array = get_residue_cached(ccd_code)
     res_array = remove_hydrogens(res_array)
 
     res_array.res_id[:] = res_id
@@ -297,12 +316,47 @@ def processed_reference_molecule_from_mol(
     )
 
 
+def _add_backbone_links(
+    atom_array: AtomArray[Any], poly_type: MoleculeType, res_ids: Iterable[int]
+) -> None:
+    """Adds the backbone bonds connecting the given residues to their neighbors.
+
+    Used for residues from a user-supplied CCD, which Biotite's
+    `connect_via_residue_names` cannot link because it only knows its internal CCD.
+    """
+    prev_atom, next_atom = (
+        ("C", "N")
+        if poly_type == MoleculeType.PROTEIN
+        else (
+            "O3'",
+            "P",
+        )
+    )
+
+    def atom_index(res_id: int, atom_name: str) -> int | None:
+        idx = np.flatnonzero(
+            (atom_array.res_id == res_id) & (atom_array.atom_name == atom_name)
+        )
+        return int(idx[0]) if len(idx) > 0 else None
+
+    bonds = atom_array.bonds
+    assert bonds is not None
+
+    for res_id in res_ids:
+        for res_a, res_b in ((res_id - 1, res_id), (res_id, res_id + 1)):
+            i = atom_index(res_a, prev_atom)
+            j = atom_index(res_b, next_atom)
+            if i is not None and j is not None:
+                bonds.add_bond(i, j, struc.BondType.SINGLE)
+
+
 def structure_with_ref_mols_from_sequence(
     sequence: str,
     poly_type: MoleculeType,
     chain_id: str,
     non_canonical_residues: dict[int, str] | None = None,
     rng: random.Random | None = None,
+    ccd: pdbx.CIFFile | None = None,
 ) -> StructureWithReferenceMolecules:
     """Builds an AtomArray and processed reference molecules from a sequence.
 
@@ -324,6 +378,9 @@ def structure_with_ref_mols_from_sequence(
             None.
         rng (random.Random | None):
             Conformer generation seed source; forwarded to each residue.
+        ccd (pdbx.CIFFile | None):
+            Optional user-supplied CCD used for non-canonical residues it contains.
+            Defaults to None.
 
     Returns:
         StructureWithReferenceMolecules:
@@ -355,7 +412,7 @@ def structure_with_ref_mols_from_sequence(
         # Swap to non-standard residue if necessary
         if res_id in non_canonical_residues:
             resname_3 = non_canonical_residues[res_id]
-            leaving_atoms = get_leaving_atoms(resname_3)
+            leaving_atoms = get_leaving_atoms(resname_3, ccd=ccd)
 
             if len(leaving_atoms) == 0:
                 logger.warning(
@@ -385,6 +442,7 @@ def structure_with_ref_mols_from_sequence(
             chain_id=chain_id,
             res_id=res_id,
             molecule_type=poly_type,
+            ccd=ccd,
         )
 
         # Parse into RDKit mol and compute conformer
@@ -410,8 +468,25 @@ def structure_with_ref_mols_from_sequence(
         else:
             atom_array += res_array
 
+    assert atom_array is not None
+
     # Auto-connect bonds
-    atom_array.bonds = struc.connect_via_residue_names(atom_array)
+    custom_res_ids = [
+        res_id
+        for res_id, resname_3 in non_canonical_residues.items()
+        if ccd is not None and resname_3 in ccd
+    ]
+    if custom_res_ids:
+        # Biotite only knows its internal CCD, so residues from the custom CCD keep
+        # the intra-residue bonds read with them and get backbone links explicitly
+        intra_residue_bonds = atom_array.bonds
+        assert intra_residue_bonds is not None
+        atom_array.bonds = struc.connect_via_residue_names(atom_array).merge(
+            intra_residue_bonds
+        )
+        _add_backbone_links(atom_array, poly_type, custom_res_ids)
+    else:
+        atom_array.bonds = struc.connect_via_residue_names(atom_array)
 
     # Force coordinates to 0 for consistency
     atom_array.coord[:] = 0.0
@@ -478,6 +553,7 @@ def structure_with_ref_mol_from_ccd_code(
     ccd_code: str,
     chain_id: str,
     rng: random.Random | None = None,
+    ccd: pdbx.CIFFile | None = None,
 ) -> StructureWithReferenceMolecules:
     """Creates a single AtomArray and processed reference molecule from a CCD code.
 
@@ -488,6 +564,9 @@ def structure_with_ref_mol_from_ccd_code(
             The chain ID to assign to the created AtomArray.
         rng (random.Random | None):
             Conformer generation seed source; defaults to the ambient stdlib RNG.
+        ccd (pdbx.CIFFile | None):
+            Optional user-supplied CCD. Components found in it take precedence over
+            Biotite's internal CCD. Defaults to None.
 
     Returns:
         StructureWithReferenceMolecules:
@@ -501,6 +580,7 @@ def structure_with_ref_mol_from_ccd_code(
         chain_id=chain_id,
         res_id=1,
         molecule_type=MoleculeType.LIGAND,
+        ccd=ccd,
     )
 
     # Get processed reference molecule
@@ -589,7 +669,9 @@ def _build_smiles_comp_id_mapping(query: Query) -> dict[str, str]:
 
 
 def structure_with_ref_mols_from_query(
-    query: Query, rng: random.Random | None = None
+    query: Query,
+    rng: random.Random | None = None,
+    ccd: pdbx.CIFFile | None = None,
 ) -> StructureWithReferenceMolecules:
     """Builds an AtomArray and processed reference molecules from a Query object.
 
@@ -611,6 +693,10 @@ def structure_with_ref_mols_from_query(
             Conformer generation seed source for every conformer in this query. One
             shared stream advances per molecule, so repeated chains still get distinct
             seeds. Defaults to the ambient stdlib RNG.
+        ccd (pdbx.CIFFile | None):
+            Optional user-supplied CCD (e.g. from ``ccd_file_path``). CCD codes of
+            ligands and non-canonical residues found in it are built from it instead
+            of Biotite's internal CCD. Defaults to None.
 
     Returns:
         StructureWithReferenceMolecules:
@@ -627,8 +713,8 @@ def structure_with_ref_mols_from_query(
         if chain.sequence is not None:
             all_entities.add(chain.sequence)
         elif chain.ccd_codes is not None:
-            for ccd in chain.ccd_codes:
-                all_entities.add(ccd)
+            for ccd_code in chain.ccd_codes:
+                all_entities.add(ccd_code)
         elif chain.smiles is not None:
             all_entities.add(chain.smiles)
     all_entities = sorted(all_entities)
@@ -649,6 +735,7 @@ def structure_with_ref_mols_from_query(
                             chain_id=chain_id,
                             non_canonical_residues=chain.non_canonical_residues,
                             rng=rng,
+                            ccd=ccd,
                         )
                     )
                     representation = chain.sequence
@@ -681,6 +768,7 @@ def structure_with_ref_mols_from_query(
                                 ccd_code=chain.ccd_codes[0],
                                 chain_id=chain_id,
                                 rng=rng,
+                                ccd=ccd,
                             )
                         )
                         representation = chain.ccd_codes[0]
